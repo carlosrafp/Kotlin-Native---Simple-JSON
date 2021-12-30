@@ -1,91 +1,98 @@
-package JSONObject
+package json
+
+import utils.StringReader
+import utils.StringUtil.toHexString
 
 class JSONengine {
-    private val str: StringBuilder
-    private var pos: Int
-    private val len: Int
+    private val str: StringReader
+    private val EOF = 0.toChar()
 
     constructor() {
-        str = StringBuilder()
-        pos = 0
-        len = 0
+        str = StringReader()
     }
 
     constructor(string: String) {
-        str = StringBuilder(string)
-        pos = 0
-        len = string.length
+        str = StringReader(string)
+    }
+
+    constructor(reader: StringReader){
+        str = reader
     }
 
     fun nextString(sb: StringBuilder): Int {
         var c: Char
         while (true) {
-            c = str[pos]
+            c = str.nextChar()
             when (c) {
                 '\u0000', '\n', '\r' -> throw Exception("Malformed String")
                 '\\' -> {
-                    c = str[++pos]
+                    c = str.nextChar()
                     when (c) {
                         'b' -> sb.append('\b')
                         't' -> sb.append('\t')
                         'n' -> sb.append('\n')
                         'r' -> sb.append('\r')
                         'u' -> try {
-                            sb.append(str.substring(pos + 1, pos + 5).toInt(16).toChar())
-                            pos += 4
+                            sb.append(str.readString(4).toInt(16).toChar())
+                            //pos += 4
                         } catch (e: NumberFormatException) {
-                            throw Exception("Illegal escape at $pos")
+                            throw Exception("Illegal escape at ${str.getPos()-1}")
                         }
                         '\"', '\'', '\\', '/' -> sb.append(c)
-                        else -> throw Exception("Illegal escape at $pos")
+                        else -> throw Exception("Illegal escape at ${str.getPos()-1}")
                     }
                 }
                 else -> {
                     if (c == '\"') {
-                        return pos++
+                        //return pos++
+                        return str.getPos()
                     }
                     sb.append(c)
                 }
             }
-            pos++
+            //pos++
         }
     }
 
     fun nextChar(): Char {
         var c: Char
-        while (pos < len) {
-            c = str[pos++]
+        while (true) {
+            c = str.nextChar()
+            if (c == EOF) break
             if (c > ' ') {
                 return c
             }
         }
-        return 0.toChar()
+        return EOF
     }
 
     fun nextAny(): Char {
         var c: Char
-        while (pos < len) {
-            c = str[pos++]
+        while (true) {
+            c = str.nextChar()
+            if (c == EOF) break
             if (c >= ' ') {
                 return c
             }
         }
-        return 0.toChar()
+        return EOF
     }
 
     fun Actualchar(): Char {
         var c: Char
-        while (pos < len) {
-            c = str[pos]
+        while (true) {
+            str.mark(1)
+            c = str.nextChar()
+            if (c == EOF) break
             if (c > ' ') {
                 return c
             }
         }
-        return 0.toChar()
+        return EOF
     }
 
     fun back() {
-        pos--
+        str.seek(str.getPos() - 1)
     }
 
     fun nextValue(): Any? {
@@ -98,11 +105,11 @@ class JSONengine {
             }
             '{' -> {
                 back()
-                JSONobject(this)
+                JSONObject(this)
             }
             '[' -> {
                 back()
-                JSONarray(this)
+                JSONArray(this)
             }
             else -> {
                 val s = StringBuilder()
@@ -148,23 +155,46 @@ class JSONengine {
     }
 
     fun size(): Int {
-        return len
+        return str.size()
     }
 
     companion object {
         fun escapeString(string: String): String {
-            var c: Char
+            var c: Char = 0.toChar()
+            var b: Char
             val tam = string.length
             val sb = StringBuilder()
             sb.append('\"')
             for (i in 0 until tam) {
+                b = c
                 c = string[i]
                 when (c) {
-                    '\t', '\"', '\'', '\\', '/' -> {
+                    '\\', '\"' -> {
                         sb.append('\\')
                         sb.append(c)
                     }
-                    else -> sb.append(c)
+                    '/' ->{
+                        if (b == '<') {
+                            sb.append('\\')
+                        }
+                        sb.append(c)
+                    }
+                    '\b' -> sb.append("\\b")
+                    '\t' -> sb.append("\\t")
+                    '\n' -> sb.append("\\n")
+                    '\u000C' -> sb.append("\\f")
+                    '\r' -> sb.append("\\r")
+                    else -> {
+                        if (c < ' ' || c in '\u0080'..'\u00a0'
+                            || c in '\u2000'..'\u2100'
+                        ) {
+                            sb.append("\\u")
+                            val hexString = c.toInt().toHexString()
+                            sb.append(hexString)
+                        } else {
+                            sb.append(c)
+                        }
+                    }
                 }
             }
             sb.append('\"')
